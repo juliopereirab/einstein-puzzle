@@ -1,0 +1,44 @@
+#####################
+joints [
+  [
+    undefined,
+    {
+      nationality: 'Norwegian',
+      colour: undefined,
+      drink: undefined,
+      pet: undefined,
+      cigarrette: undefined
+    }
+  ],
+  [
+    {
+      nationality: undefined,
+      colour: 'blue',
+      drink: undefined,
+      pet: undefined,
+      cigarrette: undefined
+    },
+    {
+      nationality: 'Norwegian',
+      colour: undefined,
+      drink: undefined,
+      pet: undefined,
+      cigarrette: undefined
+    }
+  ]
+] 
+
+r [ { colour: 'green', drink: 'coffee' }, { colour: 'white' } ] 
+
+approve false
+
+
+const allValues {
+    nationality: ["Brit", "Swede", "Dane", "Norwegian", "German"]
+    colour: ["green","red","yellow","blue","white"]
+    drink: ["tea","water","milk","beer","coffee"]
+    pet: ["fish","dogs","birds","cats","horses"]
+    cigarrette: ["Pallmall","Prince","Blend","Bluemaster","Dunhill"]
+}
+
+

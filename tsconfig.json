@@ -20,6 +20,7 @@
 			"dom"
 		],
 		"module": "es6",
+		"target": "es2015",
 		"removeComments": true,
 		"alwaysStrict": true,
 		"allowUnreachableCode": false,
