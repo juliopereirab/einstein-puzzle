@@ -24,13 +24,18 @@
 
 // The question is, who owns the fish?
 
-//npx ts-node einstein.ts
+const { serialize, deserialize } = require("v8")
 
 type Nationality = "Brit" | "Swede" | "Dane" | "Norwegian" | "German";
 type Colour = "green" | "red" | "yellow" | "blue" | "white";
 type Drink = "tea" | "water" | "milk" | "beer" | "coffee";
 type Pet = "fish" | "dogs" | "birds" | "cats" | "horses";
 type Cigarrette = "Pallmall" | "Prince" | "Blend" | "Bluemaster" | "Dunhill";
+
+
+(Array.prototype as any).distinct = function(){
+    return this.filter((value: any, index: number, self: any[]) => self.indexOf(value) === index);
+}
 
 const allValues = {
     nationality: ["Brit", "Swede", "Dane", "Norwegian", "German"],
@@ -124,7 +129,12 @@ function HouseToHouseValue(house: House){
 }
 
 
-function complete(){
+function complete(orderedElements : House[], looseElements : houseValue[], relations : houseValue[][]){
+    let didUpdate = false;
+
+    const currentValues = orderedElements.map(h => Object.values(HouseToHouseValue(h)))
+        .reduce((c, n) => [...c, ...n]);
+    
     for(var i=0; i<orderedElements.length; i++){
         var house = orderedElements[i];
         const neighbours = [orderedElements[i-1], orderedElements[i+1]].filter(el => !!el);
@@ -147,7 +157,26 @@ function complete(){
                 if(housesDontMatch(l, HouseToHouseValue(house))){
                     updateCantBe([l[keyName]], house, keyName);
                 }
-            })
+            });
+
+
+            const distinctValuesSoFar = orderedElements
+                .map(h => h[keyName].cantBe).reduce((c, n) => [...c, ...n])
+                .filter(v => currentValues.indexOf(v) === -1);
+
+            const uniqueCantBes = distinctValuesSoFar
+                .distinct();
+
+            uniqueCantBes
+                .forEach((v: string) => {
+                    if(distinctValuesSoFar.filter(val => val === v).length === 4){
+                        const shouldBeHouse = orderedElements.find(h => h[keyName].cantBe.indexOf(v) === -1);
+                        if(shouldBeHouse){
+                            shouldBeHouse[keyName].value = v;
+                            didUpdate = true;
+                        }
+                    }
+                })
         }
 
         //disperse every value
@@ -162,7 +191,10 @@ function complete(){
         //update values based on same elements in looseElements
         looseElements.filter(l => housesMatchValues(l, HouseToHouseValue(house))).forEach(l => {
             Object.keys(l).forEach(k => {
-                house[k].value = l[k];
+                if(!house[k].value){
+                    house[k].value = l[k];
+                    didUpdate = true;
+                }
             })
         })
 
@@ -172,9 +204,12 @@ function complete(){
 
             if(sameValue && neighbours.length === 1){
                 const otherValue = r.find(h => h !== sameValue);
-                Object.keys(otherValue!).forEach(k => {
-                    neighbours[0][k].value = otherValue![k];
-                })
+                if(otherValue){
+                    Object.keys(otherValue).forEach(k => {
+                        neighbours[0][k].value = otherValue![k];
+                        didUpdate = true;
+                    })
+                }
             }
         })
 
@@ -182,12 +217,17 @@ function complete(){
         Object.keys(house).filter(k => !house[k]?.value && house[k]?.cantBe?.length === 4).forEach(k => {
             const deducedValue = allValues[k].find(v => house[k]?.cantBe.indexOf(v) === -1);
 
-            house[k].value = deducedValue;
+            if(!house[k].value){
+                house[k].value = deducedValue;
+                didUpdate = true;
+            }
         });
         
         const houseVal = HouseToHouseValue(house);
         if(Object.values(houseVal).filter(v => !!v).length >= 2) looseElements.unshift(houseVal);
     }
+
+    return didUpdate;
 }
 
 function housesMatchValues(h1: houseValue, h2: houseValue){
@@ -276,18 +316,73 @@ const housesDontMatch = (h1: houseValue, h2: houseValue) => {
     return fields.some(t => h1[t] && h2[t] && h1[t] !== h2[t])
 }
 
+const deepCopy = (ob: any) => deserialize(serialize(ob));
+
+function checkAndApplyHipothesis(){
+
+    const values = keyNames
+        .map(keyName => ({[keyName]: orderedElements.map(h => h[keyName].value)}))
+        .sort((kv1, kv2) => {
+            const amount1 = Object.values(kv2)[0].filter(el => !!el).length;
+            const amount2 = Object.values(kv1)[0].filter(el => !!el).length;
+            return amount1 - amount2;
+        })
+    const key = Object.keys(values[0])[0];
+    // const val = allValues[key].filter(v => values[0][key].indexOf(v) === -1)[0]
+    const subjectHouses = orderedElements.map(h => !h[key].value ? h : undefined);
+    let selectedIndex : number | undefined;
+    let selectedValue : string | undefined;
+
+    allValues[key].filter(v => values[0][key].indexOf(v) === -1).forEach(val => {
+        for(let i=0; i<orderedElements.length; i++){
+            if(!subjectHouses[i]) continue;
+    
+            const orderedElementsCopy : House[] = deepCopy(orderedElements);
+            const looseElementsCopy : houseValue[] = deepCopy(looseElements);
+            const relationsCopy : houseValue[][] = deepCopy(relations);    
+    
+            orderedElementsCopy[i][key].value = val
+    
+            let loops = 0;
+            while(loops < 10){
+                enrichLooseElements(looseElementsCopy);
+                enrichRelations(looseElementsCopy, relationsCopy);
+                relateRelations(relationsCopy);
+                complete(orderedElementsCopy, looseElementsCopy, relationsCopy);
+                loops++;
+            }
+    
+            if(orderedElementsCopy.every(h => Object.values(h).every(v => v.cantBe.length < 5 && v.cantBe.indexOf(v.value) === -1))){
+                selectedIndex = i;
+                selectedValue = val;
+                break;
+            }
+        }
+    })
+
+    if(selectedIndex !== undefined){
+        orderedElements[selectedIndex][key].value = selectedValue;
+    }
+}
+
 let loops = 0;
 
 while(loops < 30){
-    complete();
     enrichLooseElements(looseElements);
     enrichRelations(looseElements, relations);
     relateRelations(relations);
+    complete(orderedElements, looseElements, relations);
+    if(loops > 20) checkAndApplyHipothesis();
     loops++;
 }
 
 // console.log("looseElements", looseElements);
 // console.log("relations", relations);
-// console.log("orderedElements", JSON.stringify(orderedElements[1]));
+// console.log("orderedElements", JSON.stringify(orderedElements[4]));
 
-console.log(orderedElements.map(h => JSON.stringify(h)))
+// console.log(orderedElements.map(h => JSON.stringify(h)))
+
+keyNames.forEach(keyName => {
+    console.log("___________________________________________________")
+    console.log(`${keyName} | ${orderedElements.map(h => h[keyName].value).join(" | ")}`)
+})
